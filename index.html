@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <title>webЯcade Feed Inspector</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- JSZip for handling zipped feed archives -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen font-sans" x-data="feedApp()">
+
+    <header class="border-b border-gray-800 bg-gray-900 p-4 shadow-md">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <h1 class="text-xl font-bold tracking-wide flex items-center gap-2">
+                🎮 webЯcade <span class="text-indigo-400 font-light">Feed Analytics</span>
+            </h1>
+            
+            <!-- Input Controls -->
+            <div class="flex items-center gap-3 w-full md:w-auto">
+                <input type="url" x-model="feedUrl" placeholder="Paste Feed URL (.json, .zip, base64)..." 
+                    class="bg-gray-800 border border-gray-700 px-3 py-1.5 rounded text-sm focus:outline-none focus:border-indigo-500 flex-1 md:w-80">
+                <button @click="loadFromUrl" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 rounded text-sm font-medium transition cursor-pointer">Fetch</button>
+                <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 px-4 py-1.5 rounded text-sm font-medium transition cursor-pointer">
+                    Upload File <input type="file" @change="loadFromFile" accept=".json,.zip,.txt" class="hidden">
+                </label>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-6 space-y-6" x-show="isLoaded">
+        
+        <!-- Summary Stats Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl shadow">
+                <p class="text-sm text-gray-400">Total Games</p>
+                <p class="text-3xl font-extrabold mt-1 text-indigo-400" x-text="stats.totalGames"></p>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl shadow">
+                <p class="text-sm text-gray-400">Total Categories</p>
+                <p class="text-3xl font-extrabold mt-1 text-emerald-400" x-text="stats.totalCategories"></p>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl shadow">
+                <p class="text-sm text-gray-400">Unique Systems</p>
+                <p class="text-3xl font-extrabold mt-1 text-amber-400" x-text="Object.keys(stats.systems).length"></p>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl shadow">
+                <p class="text-sm text-gray-400">Feed Title</p>
+                <p class="text-lg font-bold mt-1 truncate" x-text="feedData.title || 'Untitled'"></p>
+            </div>
+        </div>
+
+        <!-- Random Game Roulette Widget -->
+        <div class="bg-gradient-to-r from-indigo-950/40 via-gray-900 to-purple-950/40 border border-indigo-500/30 p-6 rounded-2xl shadow-lg flex flex-col md:flex-row items-center justify-between gap-6" x-show="randomGame">
+            <div class="flex items-center gap-5 w-full md:w-auto">
+                <img :src="randomGame?.thumbnail || 'https://via.placeholder.com/120'" class="w-24 h-24 object-cover rounded-xl bg-gray-800 border border-gray-700 shadow-md flex-shrink-0" alt="Game Thumbnail">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs uppercase bg-indigo-500/20 text-indigo-300 font-semibold px-2 py-0.5 rounded border border-indigo-500/30" x-text="randomGame?.type"></span>
+                        <span class="text-xs text-gray-400" x-text="randomGame?.categoryTitle"></span>
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-100" x-text="randomGame?.title"></h3>
+                    <p class="text-xs text-gray-400 line-clamp-2 max-w-xl" x-text="randomGame?.description || 'No description available for this title.'"></p>
+                </div>
+            </div>
+            <button @click="pickRandomGame" class="w-full md:w-auto bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-medium shadow transition cursor-pointer flex items-center justify-center gap-2 flex-shrink-0">
+                🎲 Pick Another Game
+            </button>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="flex border-b border-gray-800 gap-6">
+            <button @click="activeTab = 'overview'" :class="activeTab === 'overview' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200'" class="pb-3 border-b-2 font-medium text-sm transition cursor-pointer">Overview & Charts</button>
+            <button @click="activeTab = 'recent'" :class="activeTab === 'recent' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200'" class="pb-3 border-b-2 font-medium text-sm transition cursor-pointer">Recent Additions</button>
+            <button @click="activeTab = 'systems'" :class="activeTab === 'systems' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200'" class="pb-3 border-b-2 font-medium text-sm transition cursor-pointer">Systems Breakdown</button>
+        </div>
+
+        <!-- Tab 1: Overview & Charts -->
+        <div x-show="activeTab === 'overview'" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl">
+                <h3 class="text-base font-semibold mb-4 text-gray-200">Top Systems by Game Count</h3>
+                <div class="relative h-72">
+                    <canvas id="systemPieChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl">
+                <h3 class="text-base font-semibold mb-4 text-gray-200">Library Growth Timeline</h3>
+                <div class="relative h-72">
+                    <canvas id="timelineBarChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Recent Additions -->
+        <div x-show="activeTab === 'recent'" class="space-y-4">
+            <h3 class="text-base font-semibold text-gray-200">Recently Added Games</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <template x-for="item in stats.recentItems">
+                    <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl flex items-center gap-4">
+                        <img :src="item.thumbnail || 'https://via.placeholder.com/64'" class="w-16 h-16 object-cover rounded bg-gray-800" alt="Thumbnail">
+                        <div class="overflow-hidden">
+                            <h4 class="font-bold text-sm truncate" x-text="item.title"></h4>
+                            <p class="text-xs text-indigo-400 uppercase mt-0.5" x-text="item.type"></p>
+                            <span class="inline-block mt-1 text-[10px] bg-gray-800 px-2 py-0.5 rounded text-gray-400" x-text="item.addedDateFormatted"></span>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Tab 3: Systems Breakdown -->
+        <div x-show="activeTab === 'systems'" class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                    <tr class="bg-gray-800/50 text-gray-400 border-b border-gray-800">
+                        <th class="p-4 font-semibold">System / Type</th>
+                        <th class="p-4 font-semibold">Total Games</th>
+                        <th class="p-4 font-semibold">Categories Found In</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800">
+                    <template x-for="(data, sys) in stats.systems">
+                        <tr>
+                            <td class="p-4 font-medium uppercase text-indigo-300" x-text="sys"></td>
+                            <td class="p-4" x-text="data.count"></td>
+                            <td class="p-4 text-gray-400" x-text="data.categories.join(', ')"></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+
+    </main>
+
+    <script>
+        function feedApp() {
+            return {
+                feedUrl: '',
+                isLoaded: false,
+                activeTab: 'overview',
+                feedData: {},
+                allItemsList: [],
+                randomGame: null,
+                stats: { totalGames: 0, totalCategories: 0, systems: {}, recentItems: [] },
+                pieChartInstance: null,
+                barChartInstance: null,
+                
+                async loadFromUrl() {
+                    if (!this.feedUrl) return;
+                    try {
+                        const res = await fetch(this.feedUrl);
+                        const text = await res.text();
+                        await this.parseContent(text, this.feedUrl.endsWith('.zip'));
+                    } catch (e) {
+                        alert('Error loading feed. Check URL or CORS restrictions.');
+                        console.error(e);
+                    }
+                },
+
+                loadFromFile(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    
+                    if (file.name.endsWith('.zip') || file.type === 'application/zip') {
+                        reader.onload = async (e) => {
+                            try {
+                                const zip = new JSZip();
+                                const contents = await zip.loadAsync(e.target.result);
+                                const jsonFileName = Object.keys(contents.files).find(fn => fn.endsWith('.json'));
+                                if (!jsonFileName) throw new Error('No JSON file found in ZIP archive.');
+                                const jsonText = await contents.files[jsonFileName].async('text');
+                                this.parseContent(jsonText);
+                            } catch (err) {
+                                alert('Failed to read ZIP archive.');
+                                console.error(err);
+                            }
+                        };
+                        reader.readAsArrayBuffer(file);
+                    } else {
+                        reader.onload = (e) => this.parseContent(e.target.result);
+                        reader.readAsText(file);
+                    }
+                },
+
+                async parseContent(rawText) {
+                    let text = rawText.trim();
+                    // Check if content is Base64 encoded
+                    if (!text.startsWith('{') && !text.startsWith('[')) {
+                        try {
+                            text = atob(text);
+                        } catch (e) {
+                            // Not base64 or invalid
+                        }
+                    }
+                    try {
+                        const data = JSON.parse(text);
+                        this.processFeed(data);
+                    } catch (err) {
+                        alert('Could not parse feed content as JSON or valid Base64.');
+                        console.error(err);
+                    }
+                },
+
+                processFeed(data) {
+                    this.feedData = data;
+                    let totalGames = 0;
+                    let systems = {};
+                    let allItems = [];
+
+                    if (data.categories) {
+                        data.categories.forEach(cat => {
+                            if (cat.items) {
+                                cat.items.forEach(item => {
+                                    totalGames++;
+                                    const sys = item.type || 'unknown';
+                                    
+                                    if (!systems[sys]) {
+                                        systems[sys] = { count: 0, categories: new Set() };
+                                    }
+                                    systems[sys].count++;
+                                    systems[sys].categories.add(cat.title);
+
+                                    // Parse timestamp if available
+                                    let addedTime = item.added ? new Date(item.added) : null;
+                                    let addedDateFormatted = addedTime ? addedTime.toLocaleDateString() + ' ' + addedTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Unknown';
+
+                                    allItems.push({
+                                        ...item,
+                                        categoryTitle: cat.title,
+                                        addedTime: addedTime ? addedTime.getTime() : 0,
+                                        addedDateFormatted
+                                    });
+                                });
+                            }
+                        });
+                    }
+
+                    Object.keys(systems).forEach(sys => {
+                        systems[sys].categories = Array.from(systems[sys].categories);
+                    });
+
+                    // Sort items by timestamp or order
+                    allItems.sort((a, b) => a.addedTime - b.addedTime);
+                    this.allItemsList = allItems;
+
+                    this.stats = {
+                        totalGames,
+                        totalCategories: data.categories ? data.categories.length : 0,
+                        systems,
+                        recentItems: [...allItems].sort((a, b) => b.addedTime - a.addedTime).slice(0, 12)
+                    };
+
+                    this.isLoaded = true;
+                    this.pickRandomGame();
+                    
+                    this.$nextTick(() => this.renderCharts());
+                },
+
+                pickRandomGame() {
+                    if (this.allItemsList.length === 0) return;
+                    const randomIndex = Math.floor(Math.random() * this.allItemsList.length);
+                    this.randomGame = this.allItemsList[randomIndex];
+                },
+
+                renderCharts() {
+                    // Pie Chart
+                    const ctxPie = document.getElementById('systemPieChart').getContext('2d');
+                    if (this.pieChartInstance) this.pieChartInstance.destroy();
+
+                    const sortedSystems = Object.entries(this.stats.systems).sort((a,b) => b[1].count - a[1].count);
+                    this.pieChartInstance = new Chart(ctxPie, {
+                        type: 'doughnut',
+                        data: {
+                            labels: sortedSystems.slice(0, 8).map(s => s[0].toUpperCase()),
+                            datasets: [{
+                                data: sortedSystems.slice(0, 8).map(s => s[1].count),
+                                backgroundColor: ['#6366f1', '#ec4899', '#8b5cf6', '#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#6b7280']
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af' } } }
+                        }
+                    });
+
+                    // Timeline Chart (Grouped by Month/Year based on 'added')
+                    const ctxBar = document.getElementById('timelineBarChart').getContext('2d');
+                    if (this.barChartInstance) this.barChartInstance.destroy();
+
+                    const timelineCounts = {};
+                    this.allItemsList.forEach(item => {
+                        if (item.addedTime) {
+                            const d = new Date(item.addedTime);
+                            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                            timelineCounts[key] = (timelineCounts[key] || 0) + 1;
+                        }
+                    });
+
+                    const sortedDates = Object.keys(timelineCounts).sort();
+                    const barLabels = sortedDates;
+                    const barData = sortedDates.map(d => timelineCounts[d]);
+
+                    this.barChartInstance = new Chart(ctxBar, {
+                        type: 'bar',
+                        data: {
+                            labels: barLabels.length ? barLabels : ['No Timestamp Data'],
+                            datasets: [{
+                                label: 'Games Added',
+                                data: barData.length ? barData : [this.stats.totalGames],
+                                backgroundColor: '#6366f1',
+                                borderRadius: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { ticks: { color: '#9ca3af' }, grid: { display: false } },
+                                y: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' } }
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    </script>
+</body>
+</html>
