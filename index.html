@@ -2,165 +2,348 @@
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>webЯcade Feed Inspector</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- JSZip for handling zipped feed archives -->
+    <!-- JSZip CDN for reading .zip feeds -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Alpine.js CDN for reactive UI state -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        /* Custom scrollbars for clean table/grid browsing */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen font-sans" x-data="feedApp()">
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-indigo-500 selection:text-white"
+      x-data="feedApp()"
+      @dragover.prevent="isDragging = true"
+      @dragleave.prevent="isDragging = false"
+      @drop.prevent="handleDrop($event)">
 
-    <header class="border-b border-gray-800 bg-gray-900 p-4 shadow-md">
-        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-            <h1 class="text-xl font-bold tracking-wide flex items-center gap-2">
-                🎮 webЯcade <span class="text-indigo-400 font-light">Feed Analytics</span>
-            </h1>
-            
-            <!-- Input Controls -->
-            <div class="flex items-center gap-3 w-full md:w-auto">
-                <input type="url" x-model="feedUrl" placeholder="Paste Feed URL (.json, .zip, base64)..." 
-                    class="bg-gray-800 border border-gray-700 px-3 py-1.5 rounded text-sm focus:outline-none focus:border-indigo-500 flex-1 md:w-80">
-                <button @click="loadFromUrl" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-1.5 rounded text-sm font-medium transition cursor-pointer">Fetch</button>
-                <label class="bg-gray-800 hover:bg-gray-700 border border-gray-700 px-4 py-1.5 rounded text-sm font-medium transition cursor-pointer">
-                    Upload File <input type="file" @change="loadFromFile" accept=".json,.zip,.txt" class="hidden">
+    <!-- Full-screen Drag & Drop Target Overlay -->
+    <div x-show="isDragging" 
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100 scale-100"
+         x-transition:leave-end="opacity-0 scale-95"
+         class="fixed inset-0 bg-indigo-950/85 backdrop-blur-md z-50 flex items-center justify-center border-4 border-indigo-400 border-dashed m-4 rounded-3xl pointer-events-none">
+        <div class="text-center space-y-3 p-6 bg-slate-900/90 rounded-2xl border border-indigo-500/40 shadow-2xl">
+            <div class="text-5xl animate-bounce">📥</div>
+            <p class="text-2xl font-bold text-indigo-200">Drop your webЯcade feed file here</p>
+            <p class="text-sm text-indigo-300/80">Supports <code class="bg-slate-800 px-2 py-0.5 rounded text-indigo-400 font-mono">.json</code>, <code class="bg-slate-800 px-2 py-0.5 rounded text-indigo-400 font-mono">.zip</code>, or Base64 encoded feed files</p>
+        </div>
+    </div>
+
+    <!-- Application Top Navigation Bar -->
+    <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-40 px-6 py-4 shadow-sm">
+        <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">🎮</span>
+                <h1 class="text-lg font-bold tracking-wide">
+                    webЯcade <span class="text-indigo-400 font-light">Feed Inspector</span>
+                </h1>
+            </div>
+            <div class="flex items-center gap-3" x-show="isLoaded">
+                <span class="text-xs text-slate-400 font-mono bg-slate-800/80 border border-slate-700/60 px-3 py-1.5 rounded-lg truncate max-w-xs" x-text="currentFileName"></span>
+                <label class="bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/50 px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow transition-all cursor-pointer flex items-center gap-2 active:scale-95">
+                    <span>📂 Load New Feed</span>
+                    <input type="file" @change="loadFromFile" accept=".json,.zip,.txt" class="hidden">
                 </label>
             </div>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto p-6 space-y-6" x-show="isLoaded">
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
         
-        <!-- Summary Stats Cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl shadow">
-                <p class="text-sm text-gray-400">Total Games</p>
-                <p class="text-3xl font-extrabold mt-1 text-indigo-400" x-text="stats.totalGames"></p>
-            </div>
-            <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl shadow">
-                <p class="text-sm text-gray-400">Total Categories</p>
-                <p class="text-3xl font-extrabold mt-1 text-emerald-400" x-text="stats.totalCategories"></p>
-            </div>
-            <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl shadow">
-                <p class="text-sm text-gray-400">Unique Systems</p>
-                <p class="text-3xl font-extrabold mt-1 text-amber-400" x-text="Object.keys(stats.systems).length"></p>
-            </div>
-            <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl shadow">
-                <p class="text-sm text-gray-400">Feed Title</p>
-                <p class="text-lg font-bold mt-1 truncate" x-text="feedData.title || 'Untitled'"></p>
+        <!-- Welcome Screen / Empty State -->
+        <div x-show="!isLoaded" class="py-16 sm:py-24 flex flex-col items-center justify-center text-center">
+            <div class="max-w-xl w-full bg-slate-900/80 border border-slate-800 p-8 sm:p-12 rounded-3xl shadow-2xl space-y-6 relative overflow-hidden backdrop-blur-xl">
+                <!-- Background decorative ambient glow -->
+                <div class="absolute -top-12 -left-12 w-40 h-40 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
+                <div class="absolute -bottom-12 -right-12 w-40 h-40 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+                <div class="w-20 h-20 bg-indigo-500/10 border border-indigo-500/30 rounded-3xl mx-auto flex items-center justify-center text-indigo-400 text-4xl shadow-inner">
+                    📦
+                </div>
+                
+                <div class="space-y-2">
+                    <h2 class="text-2xl font-bold tracking-tight text-slate-100">Drop your webЯcade feed file</h2>
+                    <p class="text-sm text-slate-400 leading-relaxed max-w-md mx-auto">
+                        Drag and drop your JSON or ZIP feed anywhere on this page, or click below to browse your computer.
+                    </p>
+                </div>
+                
+                <div>
+                    <label class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-7 py-3.5 rounded-xl shadow-lg shadow-indigo-600/25 transition-all cursor-pointer text-sm hover:scale-[1.02] active:scale-95">
+                        <span>Select Feed File</span>
+                        <input type="file" @change="loadFromFile" accept=".json,.zip,.txt" class="hidden">
+                    </label>
+                </div>
+
+                <!-- Explicit Local Privacy Guarantee -->
+                <div class="pt-6 border-t border-slate-800/80 flex items-center justify-center gap-2.5 text-xs text-emerald-400 font-medium">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>100% Private & Local Processing — your feed data never leaves your browser.</span>
+                </div>
             </div>
         </div>
 
-        <!-- Random Game Roulette Widget -->
-        <div class="bg-gradient-to-r from-indigo-950/40 via-gray-900 to-purple-950/40 border border-indigo-500/30 p-6 rounded-2xl shadow-lg flex flex-col md:flex-row items-center justify-between gap-6" x-show="randomGame">
-            <div class="flex items-center gap-5 w-full md:w-auto">
-                <img :src="randomGame?.thumbnail || 'https://via.placeholder.com/120'" class="w-24 h-24 object-cover rounded-xl bg-gray-800 border border-gray-700 shadow-md flex-shrink-0" alt="Game Thumbnail">
-                <div class="space-y-1">
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs uppercase bg-indigo-500/20 text-indigo-300 font-semibold px-2 py-0.5 rounded border border-indigo-500/30" x-text="randomGame?.type"></span>
-                        <span class="text-xs text-gray-400" x-text="randomGame?.categoryTitle"></span>
+        <!-- Dashboard Display (Visible when feed is loaded) -->
+        <div x-show="isLoaded" class="space-y-6" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0">
+            
+            <!-- Summary Stats Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-slate-900/90 border border-slate-800 p-5 rounded-2xl shadow-sm hover:border-slate-700/80 transition-colors">
+                    <p class="text-xs text-slate-400 uppercase tracking-wider font-bold">Total Games</p>
+                    <p class="text-3xl font-black mt-1 text-indigo-400" x-text="stats.totalGames.toLocaleString()"></p>
+                </div>
+                <div class="bg-slate-900/90 border border-slate-800 p-5 rounded-2xl shadow-sm hover:border-slate-700/80 transition-colors">
+                    <p class="text-xs text-slate-400 uppercase tracking-wider font-bold">Total Categories</p>
+                    <p class="text-3xl font-black mt-1 text-emerald-400" x-text="stats.totalCategories.toLocaleString()"></p>
+                </div>
+                <div class="bg-slate-900/90 border border-slate-800 p-5 rounded-2xl shadow-sm hover:border-slate-700/80 transition-colors">
+                    <p class="text-xs text-slate-400 uppercase tracking-wider font-bold">Unique Systems</p>
+                    <p class="text-3xl font-black mt-1 text-amber-400" x-text="Object.keys(stats.systems).length"></p>
+                </div>
+                <div class="bg-slate-900/90 border border-slate-800 p-5 rounded-2xl shadow-sm hover:border-slate-700/80 transition-colors overflow-hidden">
+                    <p class="text-xs text-slate-400 uppercase tracking-wider font-bold">Feed Title</p>
+                    <p class="text-base font-bold mt-1.5 truncate text-slate-200" x-text="feedData.title || 'Untitled Feed'"></p>
+                </div>
+            </div>
+
+            <!-- Random Game Roulette Card -->
+            <div class="bg-gradient-to-r from-indigo-950/40 via-slate-900 to-purple-950/30 border border-indigo-500/30 p-6 rounded-2xl shadow-lg flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden" x-show="randomGame">
+                <div class="flex items-center gap-5 w-full md:w-auto">
+                    <img :src="randomGame?.thumbnail || 'https://via.placeholder.com/120?text=No+Cover'" 
+                         class="w-24 h-24 object-cover rounded-xl bg-slate-800 border border-slate-700/80 shadow-md flex-shrink-0" 
+                         alt="Game Thumbnail"
+                         onerror="this.src='https://via.placeholder.com/120?text=No+Cover'">
+                    <div class="space-y-1.5 overflow-hidden">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-[10px] uppercase font-bold bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/40 tracking-wider" x-text="randomGame?.type"></span>
+                            <span class="text-xs text-slate-400 font-medium truncate" x-text="randomGame?.categoryTitle"></span>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-100 truncate" x-text="randomGame?.title"></h3>
+                        <p class="text-xs text-slate-400 line-clamp-2 max-w-xl leading-relaxed" x-text="randomGame?.description || 'No description provided in feed.'"></p>
                     </div>
-                    <h3 class="text-lg font-bold text-gray-100" x-text="randomGame?.title"></h3>
-                    <p class="text-xs text-gray-400 line-clamp-2 max-w-xl" x-text="randomGame?.description || 'No description available for this title.'"></p>
                 </div>
+                <button @click="pickRandomGame" class="w-full md:w-auto bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-semibold shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 flex-shrink-0 active:scale-95">
+                    <span>🎲 Pick Another Game</span>
+                </button>
             </div>
-            <button @click="pickRandomGame" class="w-full md:w-auto bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-medium shadow transition cursor-pointer flex items-center justify-center gap-2 flex-shrink-0">
-                🎲 Pick Another Game
-            </button>
-        </div>
 
-        <!-- Navigation Tabs -->
-        <div class="flex border-b border-gray-800 gap-6">
-            <button @click="activeTab = 'overview'" :class="activeTab === 'overview' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200'" class="pb-3 border-b-2 font-medium text-sm transition cursor-pointer">Overview & Charts</button>
-            <button @click="activeTab = 'recent'" :class="activeTab === 'recent' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200'" class="pb-3 border-b-2 font-medium text-sm transition cursor-pointer">Recent Additions</button>
-            <button @click="activeTab = 'systems'" :class="activeTab === 'systems' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200'" class="pb-3 border-b-2 font-medium text-sm transition cursor-pointer">Systems Breakdown</button>
-        </div>
+            <!-- Dashboard Navigation Tabs -->
+            <div class="flex border-b border-slate-800 gap-6">
+                <button @click="activeTab = 'overview'" 
+                        :class="activeTab === 'overview' ? 'border-indigo-500 text-indigo-400 font-bold' : 'border-transparent text-slate-400 hover:text-slate-200 font-medium'" 
+                        class="pb-3 border-b-2 text-sm transition-all cursor-pointer flex items-center gap-2">
+                    📊 Overview & Charts
+                </button>
+                <button @click="activeTab = 'recent'" 
+                        :class="activeTab === 'recent' ? 'border-indigo-500 text-indigo-400 font-bold' : 'border-transparent text-slate-400 hover:text-slate-200 font-medium'" 
+                        class="pb-3 border-b-2 text-sm transition-all cursor-pointer flex items-center gap-2">
+                    🕒 Recent Additions
+                </button>
+                <button @click="activeTab = 'systems'" 
+                        :class="activeTab === 'systems' ? 'border-indigo-500 text-indigo-400 font-bold' : 'border-transparent text-slate-400 hover:text-slate-200 font-medium'" 
+                        class="pb-3 border-b-2 text-sm transition-all cursor-pointer flex items-center gap-2">
+                    🕹️ Systems Breakdown
+                </button>
+            </div>
 
-        <!-- Tab 1: Overview & Charts -->
-        <div x-show="activeTab === 'overview'" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl">
-                <h3 class="text-base font-semibold mb-4 text-gray-200">Top Systems by Game Count</h3>
-                <div class="relative h-72">
-                    <canvas id="systemPieChart"></canvas>
+            <!-- TAB 1: Overview & Charts -->
+            <div x-show="activeTab === 'overview'" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                <!-- Doughnut Chart: Top Systems -->
+                <div class="bg-slate-900/90 border border-slate-800 p-5 rounded-2xl flex flex-col shadow-sm">
+                    <h3 class="text-base font-semibold mb-4 text-slate-200 flex items-center gap-2">
+                        <span>📈</span> Top Systems by Game Count
+                    </h3>
+                    <div class="relative flex-1 min-h-[280px] flex items-center justify-center">
+                        <canvas id="systemPieChart"></canvas>
+                    </div>
                 </div>
-            </div>
-            <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl">
-                <h3 class="text-base font-semibold mb-4 text-gray-200">Library Growth Timeline</h3>
-                <div class="relative h-72">
-                    <canvas id="timelineBarChart"></canvas>
-                </div>
-            </div>
-        </div>
 
-        <!-- Tab 2: Recent Additions -->
-        <div x-show="activeTab === 'recent'" class="space-y-4">
-            <h3 class="text-base font-semibold text-gray-200">Recently Added Games</h3>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <template x-for="item in stats.recentItems">
-                    <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl flex items-center gap-4">
-                        <img :src="item.thumbnail || 'https://via.placeholder.com/64'" class="w-16 h-16 object-cover rounded bg-gray-800" alt="Thumbnail">
-                        <div class="overflow-hidden">
-                            <h4 class="font-bold text-sm truncate" x-text="item.title"></h4>
-                            <p class="text-xs text-indigo-400 uppercase mt-0.5" x-text="item.type"></p>
-                            <span class="inline-block mt-1 text-[10px] bg-gray-800 px-2 py-0.5 rounded text-gray-400" x-text="item.addedDateFormatted"></span>
+                <!-- Library Growth Activity Timeline -->
+                <div class="bg-slate-900/90 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between shadow-sm">
+                    
+                    <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+                        <h3 class="text-base font-semibold text-slate-200 flex items-center gap-2">
+                            <span>📅</span> Library Growth Timeline
+                        </h3>
+                        <!-- Timeline Mode Toggle -->
+                        <div class="bg-slate-800/90 p-1 rounded-lg flex gap-1 text-xs font-semibold border border-slate-700/50">
+                            <button @click="timelineView = 'bar'" :class="timelineView === 'bar' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'" class="px-3 py-1 rounded-md transition cursor-pointer">Monthly Bar</button>
+                            <button @click="timelineView = 'heatmap'" :class="timelineView === 'heatmap' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'" class="px-3 py-1 rounded-md transition cursor-pointer">Activity Grid</button>
                         </div>
                     </div>
-                </template>
-            </div>
-        </div>
 
-        <!-- Tab 3: Systems Breakdown -->
-        <div x-show="activeTab === 'systems'" class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-            <table class="w-full text-left border-collapse text-sm">
-                <thead>
-                    <tr class="bg-gray-800/50 text-gray-400 border-b border-gray-800">
-                        <th class="p-4 font-semibold">System / Type</th>
-                        <th class="p-4 font-semibold">Total Games</th>
-                        <th class="p-4 font-semibold">Categories Found In</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-800">
-                    <template x-for="(data, sys) in stats.systems">
-                        <tr>
-                            <td class="p-4 font-medium uppercase text-indigo-300" x-text="sys"></td>
-                            <td class="p-4" x-text="data.count"></td>
-                            <td class="p-4 text-gray-400" x-text="data.categories.join(', ')"></td>
-                        </tr>
+                    <!-- Mode A: Monthly Bar Chart -->
+                    <div class="relative flex-1 min-h-[280px]" x-show="timelineView === 'bar'">
+                        <canvas id="timelineBarChart"></canvas>
+                    </div>
+
+                    <!-- Mode B: Enhanced GitHub-Style Contribution Heatmap -->
+                    <div class="flex-1 flex flex-col justify-between py-2" x-show="timelineView === 'heatmap'">
+                        
+                        <div class="overflow-x-auto pb-4">
+                            <div class="min-w-[680px] space-y-2">
+                                
+                                <!-- Month Headers Row -->
+                                <div class="flex text-[10px] text-slate-400 font-medium pl-8 relative h-4">
+                                    <template x-for="m in monthHeaders">
+                                        <span class="absolute transform -translate-x-1/2" 
+                                              :style="'left: ' + m.leftPercent + '%'" 
+                                              x-text="m.label"></span>
+                                    </template>
+                                </div>
+
+                                <!-- Heatmap Main Body (Day Labels + Grid) -->
+                                <div class="flex gap-2">
+                                    
+                                    <!-- Day-of-Week Row Labels -->
+                                    <div class="grid grid-rows-7 gap-1 text-[10px] text-slate-400 font-semibold py-0.5 select-none w-6 text-right pr-1">
+                                        <span></span>
+                                        <span>Mon</span>
+                                        <span></span>
+                                        <span>Wed</span>
+                                        <span></span>
+                                        <span>Fri</span>
+                                        <span></span>
+                                    </div>
+
+                                    <!-- 52-Week 7-Row Grid -->
+                                    <div class="grid grid-flow-col gap-1 flex-1" style="grid-template-rows: repeat(7, minmax(0, 1fr));">
+                                        <template x-for="day in heatmapDays">
+                                            <div :class="getHeatmapColorClass(day.count)" 
+                                                 class="w-3 h-3 rounded-sm transition-all duration-150 hover:scale-125 hover:z-10 hover:ring-2 hover:ring-white cursor-pointer relative"
+                                                 :title="formatTooltip(day.date, day.count)">
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <!-- Relative Intensity Scale Legend -->
+                        <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 border-t border-slate-800/80 pt-3 px-1 gap-2">
+                            <span class="text-[11px] font-medium">Activity relative to peak (<strong class="text-emerald-400" x-text="heatmapMaxCount"></strong> max games/day)</span>
+                            <div class="flex items-center gap-1.5 text-[10px]">
+                                <span>0</span>
+                                <div class="w-3 h-3 bg-slate-800/80 border border-slate-700/60 rounded-sm"></div>
+                                <div class="w-3 h-3 bg-emerald-950 border border-emerald-800/60 rounded-sm"></div>
+                                <div class="w-3 h-3 bg-emerald-800 rounded-sm"></div>
+                                <div class="w-3 h-3 bg-emerald-600 rounded-sm"></div>
+                                <div class="w-3 h-3 bg-emerald-400 rounded-sm shadow-sm shadow-emerald-400/50"></div>
+                                <span>Max</span>
+                            </div>
+                        </div>
+
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- TAB 2: Recent Additions -->
+            <div x-show="activeTab === 'recent'" class="space-y-4">
+                <h3 class="text-base font-semibold text-slate-200">Most Recently Added Titles</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <template x-for="item in stats.recentItems">
+                        <div class="bg-slate-900/90 border border-slate-800 p-4 rounded-xl flex items-center gap-4 hover:border-slate-700 transition-colors">
+                            <img :src="item.thumbnail || 'https://via.placeholder.com/64?text=No+Img'" 
+                                 class="w-16 h-16 object-cover rounded-lg bg-slate-800 border border-slate-700/60 flex-shrink-0" 
+                                 alt="Thumbnail"
+                                 onerror="this.src='https://via.placeholder.com/64?text=No+Img'">
+                            <div class="overflow-hidden space-y-0.5">
+                                <h4 class="font-bold text-sm truncate text-slate-100" x-text="item.title"></h4>
+                                <p class="text-[11px] text-indigo-400 font-bold uppercase tracking-wider" x-text="item.type"></p>
+                                <span class="inline-block text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700/50 font-mono" x-text="item.addedDateFormatted"></span>
+                            </div>
+                        </div>
                     </template>
-                </tbody>
-            </table>
+                </div>
+            </div>
+
+            <!-- TAB 3: Systems Breakdown -->
+            <div x-show="activeTab === 'systems'" class="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="bg-slate-800/60 text-slate-400 border-b border-slate-800 uppercase text-[11px] tracking-wider">
+                                <th class="p-4 font-bold">System / Platform Type</th>
+                                <th class="p-4 font-bold">Total Games</th>
+                                <th class="p-4 font-bold">Categories Found In</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/80">
+                            <template x-for="(data, sys) in stats.systems">
+                                <tr class="hover:bg-slate-800/30 transition-colors">
+                                    <td class="p-4 font-bold uppercase text-indigo-300 font-mono" x-text="sys"></td>
+                                    <td class="p-4 font-semibold text-slate-200" x-text="data.count.toLocaleString()"></td>
+                                    <td class="p-4 text-slate-400 text-xs" x-text="data.categories.join(', ')"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </div>
 
     </main>
 
+    <!-- JavaScript Application Logic -->
     <script>
         function feedApp() {
             return {
-                feedUrl: '',
                 isLoaded: false,
+                isDragging: false,
+                currentFileName: '',
                 activeTab: 'overview',
+                timelineView: 'bar',
                 feedData: {},
                 allItemsList: [],
                 randomGame: null,
+                heatmapDays: [],
+                monthHeaders: [],
+                heatmapMaxCount: 0,
                 stats: { totalGames: 0, totalCategories: 0, systems: {}, recentItems: [] },
                 pieChartInstance: null,
                 barChartInstance: null,
-                
-                async loadFromUrl() {
-                    if (!this.feedUrl) return;
-                    try {
-                        const res = await fetch(this.feedUrl);
-                        const text = await res.text();
-                        await this.parseContent(text, this.feedUrl.endsWith('.zip'));
-                    } catch (e) {
-                        alert('Error loading feed. Check URL or CORS restrictions.');
-                        console.error(e);
-                    }
+
+                handleDrop(event) {
+                    this.isDragging = false;
+                    const file = event.dataTransfer.files[0];
+                    if (file) this.processFile(file);
                 },
 
                 loadFromFile(event) {
                     const file = event.target.files[0];
-                    if (!file) return;
+                    if (file) this.processFile(file);
+                },
+
+                processFile(file) {
+                    this.currentFileName = file.name;
                     const reader = new FileReader();
                     
                     if (file.name.endsWith('.zip') || file.type === 'application/zip') {
@@ -169,11 +352,11 @@
                                 const zip = new JSZip();
                                 const contents = await zip.loadAsync(e.target.result);
                                 const jsonFileName = Object.keys(contents.files).find(fn => fn.endsWith('.json'));
-                                if (!jsonFileName) throw new Error('No JSON file found in ZIP archive.');
+                                if (!jsonFileName) throw new Error('No JSON file found inside ZIP archive.');
                                 const jsonText = await contents.files[jsonFileName].async('text');
                                 this.parseContent(jsonText);
                             } catch (err) {
-                                alert('Failed to read ZIP archive.');
+                                alert('Error reading ZIP file: ' + err.message);
                                 console.error(err);
                             }
                         };
@@ -186,19 +369,19 @@
 
                 async parseContent(rawText) {
                     let text = rawText.trim();
-                    // Check if content is Base64 encoded
+                    // Attempt Base64 decode if string doesn't start with JSON syntax
                     if (!text.startsWith('{') && !text.startsWith('[')) {
-                        try {
-                            text = atob(text);
+                        try { 
+                            text = atob(text); 
                         } catch (e) {
-                            // Not base64 or invalid
+                            // Leave as is if not valid base64
                         }
                     }
                     try {
                         const data = JSON.parse(text);
                         this.processFeed(data);
                     } catch (err) {
-                        alert('Could not parse feed content as JSON or valid Base64.');
+                        alert('Could not parse feed content as valid JSON or Base64 JSON.');
                         console.error(err);
                     }
                 },
@@ -208,6 +391,7 @@
                     let totalGames = 0;
                     let systems = {};
                     let allItems = [];
+                    let dateCounts = {};
 
                     if (data.categories) {
                         data.categories.forEach(cat => {
@@ -222,14 +406,24 @@
                                     systems[sys].count++;
                                     systems[sys].categories.add(cat.title);
 
-                                    // Parse timestamp if available
+                                    // Parse 'added' timestamp or default
                                     let addedTime = item.added ? new Date(item.added) : null;
-                                    let addedDateFormatted = addedTime ? addedTime.toLocaleDateString() + ' ' + addedTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Unknown';
+                                    let addedDateFormatted = addedTime && !isNaN(addedTime.getTime()) 
+                                        ? addedTime.toLocaleDateString() + ' ' + addedTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) 
+                                        : 'No Timestamp';
+                                    
+                                    if (addedTime && !isNaN(addedTime.getTime())) {
+                                        const yyyy = addedTime.getFullYear();
+                                        const mm = String(addedTime.getMonth() + 1).padStart(2, '0');
+                                        const dd = String(addedTime.getDate()).padStart(2, '0');
+                                        const dateKey = `${yyyy}-${mm}-${dd}`;
+                                        dateCounts[dateKey] = (dateCounts[dateKey] || 0) + 1;
+                                    }
 
                                     allItems.push({
                                         ...item,
                                         categoryTitle: cat.title,
-                                        addedTime: addedTime ? addedTime.getTime() : 0,
+                                        addedTime: (addedTime && !isNaN(addedTime.getTime())) ? addedTime.getTime() : 0,
                                         addedDateFormatted
                                     });
                                 });
@@ -241,9 +435,11 @@
                         systems[sys].categories = Array.from(systems[sys].categories);
                     });
 
-                    // Sort items by timestamp or order
                     allItems.sort((a, b) => a.addedTime - b.addedTime);
                     this.allItemsList = allItems;
+
+                    // Generate Heatmap Grid & Month Headers
+                    this.generateHeatmapData(dateCounts);
 
                     this.stats = {
                         totalGames,
@@ -258,6 +454,73 @@
                     this.$nextTick(() => this.renderCharts());
                 },
 
+                generateHeatmapData(dateCounts) {
+                    const days = [];
+                    const today = new Date();
+                    
+                    // Align start date to Sunday 52 weeks ago
+                    const startDate = new Date(today);
+                    startDate.setDate(today.getDate() - 364);
+                    while (startDate.getDay() !== 0) { // 0 = Sunday
+                        startDate.setDate(startDate.getDate() - 1);
+                    }
+
+                    let maxVal = 0;
+                    const totalDays = 52 * 7; // 364 cells
+                    const monthMap = [];
+
+                    for (let i = 0; i < totalDays; i++) {
+                        const d = new Date(startDate);
+                        d.setDate(d.getDate() + i);
+
+                        const yyyy = d.getFullYear();
+                        const mm = String(d.getMonth() + 1).padStart(2, '0');
+                        const dd = String(d.getDate()).padStart(2, '0');
+                        const dateKey = `${yyyy}-${mm}-${dd}`;
+                        
+                        const count = dateCounts[dateKey] || 0;
+                        if (count > maxVal) maxVal = count;
+
+                        // Track month headers when day is 1st of month (or start of grid)
+                        if (d.getDate() === 1 || i === 0) {
+                            const monthName = d.toLocaleString('default', { month: 'short' });
+                            const weekCol = Math.floor(i / 7);
+                            const leftPercent = (weekCol / 52) * 100;
+                            monthMap.push({ label: monthName, leftPercent });
+                        }
+
+                        days.push({
+                            date: dateKey,
+                            count: count,
+                            rawDate: d
+                        });
+                    }
+
+                    this.heatmapDays = days;
+                    this.heatmapMaxCount = maxVal;
+                    this.monthHeaders = monthMap;
+                },
+
+                // Dynamic Heatmap intensity calculation relative to peak activity day
+                getHeatmapColorClass(count) {
+                    if (count === 0) return 'bg-slate-800/80 border border-slate-700/60';
+                    if (this.heatmapMaxCount === 0) return 'bg-emerald-900';
+
+                    const ratio = count / this.heatmapMaxCount;
+
+                    if (ratio <= 0.25) return 'bg-emerald-950 border border-emerald-800/60';
+                    if (ratio <= 0.50) return 'bg-emerald-800';
+                    if (ratio <= 0.75) return 'bg-emerald-600';
+                    return 'bg-emerald-400 shadow-sm shadow-emerald-400/50';
+                },
+
+                formatTooltip(dateStr, count) {
+                    const [y, m, d] = dateStr.split('-');
+                    const dateObj = new Date(y, m - 1, d);
+                    const formattedDate = dateObj.toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' });
+                    return `${formattedDate}: ${count} ${count === 1 ? 'game' : 'games'} added`;
+                },
+
                 pickRandomGame() {
                     if (this.allItemsList.length === 0) return;
                     const randomIndex = Math.floor(Math.random() * this.allItemsList.length);
@@ -265,7 +528,7 @@
                 },
 
                 renderCharts() {
-                    // Pie Chart
+                    // 1. Systems Doughnut Chart
                     const ctxPie = document.getElementById('systemPieChart').getContext('2d');
                     if (this.pieChartInstance) this.pieChartInstance.destroy();
 
@@ -276,17 +539,24 @@
                             labels: sortedSystems.slice(0, 8).map(s => s[0].toUpperCase()),
                             datasets: [{
                                 data: sortedSystems.slice(0, 8).map(s => s[1].count),
-                                backgroundColor: ['#6366f1', '#ec4899', '#8b5cf6', '#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#6b7280']
+                                backgroundColor: ['#6366f1', '#ec4899', '#8b5cf6', '#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#64748b'],
+                                borderWidth: 2,
+                                borderColor: '#0f172a'
                             }]
                         },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
-                            plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af' } } }
+                            plugins: { 
+                                legend: { 
+                                    position: 'bottom', 
+                                    labels: { color: '#94a3b8', font: { family: 'sans-serif', size: 12 } } 
+                                } 
+                            }
                         }
                     });
 
-                    // Timeline Chart (Grouped by Month/Year based on 'added')
+                    // 2. Timeline Bar Chart (Monthly aggregations)
                     const ctxBar = document.getElementById('timelineBarChart').getContext('2d');
                     if (this.barChartInstance) this.barChartInstance.destroy();
 
@@ -300,18 +570,15 @@
                     });
 
                     const sortedDates = Object.keys(timelineCounts).sort();
-                    const barLabels = sortedDates;
-                    const barData = sortedDates.map(d => timelineCounts[d]);
-
                     this.barChartInstance = new Chart(ctxBar, {
                         type: 'bar',
                         data: {
-                            labels: barLabels.length ? barLabels : ['No Timestamp Data'],
+                            labels: sortedDates.length ? sortedDates : ['No Timestamp Data'],
                             datasets: [{
                                 label: 'Games Added',
-                                data: barData.length ? barData : [this.stats.totalGames],
+                                data: sortedDates.length ? sortedDates.map(d => timelineCounts[d]) : [this.stats.totalGames],
                                 backgroundColor: '#6366f1',
-                                borderRadius: 4
+                                borderRadius: 6
                             }]
                         },
                         options: {
@@ -319,8 +586,8 @@
                             maintainAspectRatio: false,
                             plugins: { legend: { display: false } },
                             scales: {
-                                x: { ticks: { color: '#9ca3af' }, grid: { display: false } },
-                                y: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' } }
+                                x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
+                                y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
                             }
                         }
                     });
