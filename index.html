@@ -152,20 +152,33 @@
             </div>
 
             <!-- Dashboard Navigation Tabs -->
-            <div class="flex border-b border-slate-800 gap-6">
-                <button @click="activeTab = 'overview'" 
+            <div class="flex flex-wrap border-b border-slate-800 gap-2 sm:gap-6">
+                <button @click="switchTab('overview')" 
                         :class="activeTab === 'overview' ? 'border-indigo-500 text-indigo-400 font-bold' : 'border-transparent text-slate-400 hover:text-slate-200 font-medium'" 
-                        class="pb-3 border-b-2 text-sm transition-all cursor-pointer flex items-center gap-2">
+                        class="pb-3 border-b-2 text-sm transition-all cursor-pointer flex items-center gap-2 px-1">
                     📊 Overview & Charts
                 </button>
-                <button @click="activeTab = 'recent'" 
+                <button @click="switchTab('domains')" 
+                        :class="activeTab === 'domains' ? 'border-indigo-500 text-indigo-400 font-bold' : 'border-transparent text-slate-400 hover:text-slate-200 font-medium'" 
+                        class="pb-3 border-b-2 text-sm transition-all cursor-pointer flex items-center gap-2 px-1">
+                    🌐 Domain Breakdown
+                </button>
+                <button @click="switchTab('audit')" 
+                        :class="activeTab === 'audit' ? 'border-indigo-500 text-indigo-400 font-bold' : 'border-transparent text-slate-400 hover:text-slate-200 font-medium'" 
+                        class="pb-3 border-b-2 text-sm transition-all cursor-pointer flex items-center gap-2 px-1">
+                    ⚠️ Metadata Audit
+                    <span x-show="missingMetadataGames.length > 0" 
+                          class="bg-amber-500/20 text-amber-300 text-[10px] px-2 py-0.5 rounded-full border border-amber-500/40" 
+                          x-text="missingMetadataGames.length"></span>
+                </button>
+                <button @click="switchTab('recent')" 
                         :class="activeTab === 'recent' ? 'border-indigo-500 text-indigo-400 font-bold' : 'border-transparent text-slate-400 hover:text-slate-200 font-medium'" 
-                        class="pb-3 border-b-2 text-sm transition-all cursor-pointer flex items-center gap-2">
+                        class="pb-3 border-b-2 text-sm transition-all cursor-pointer flex items-center gap-2 px-1">
                     🕒 Recent Additions
                 </button>
-                <button @click="activeTab = 'systems'" 
+                <button @click="switchTab('systems')" 
                         :class="activeTab === 'systems' ? 'border-indigo-500 text-indigo-400 font-bold' : 'border-transparent text-slate-400 hover:text-slate-200 font-medium'" 
-                        class="pb-3 border-b-2 text-sm transition-all cursor-pointer flex items-center gap-2">
+                        class="pb-3 border-b-2 text-sm transition-all cursor-pointer flex items-center gap-2 px-1">
                     🕹️ Systems Breakdown
                 </button>
             </div>
@@ -202,7 +215,7 @@
                         <canvas id="timelineBarChart"></canvas>
                     </div>
 
-                    <!-- Mode B: Enhanced GitHub-Style Contribution Heatmap -->
+                    <!-- Mode B: GitHub-Style Contribution Heatmap -->
                     <div class="flex-1 flex flex-col justify-between py-2" x-show="timelineView === 'heatmap'">
                         
                         <div class="overflow-x-auto pb-4">
@@ -219,7 +232,6 @@
 
                                 <!-- Heatmap Main Body (Day Labels + Grid) -->
                                 <div class="flex gap-2">
-                                    
                                     <!-- Day-of-Week Row Labels -->
                                     <div class="grid grid-rows-7 gap-1 text-[10px] text-slate-400 font-semibold py-0.5 select-none w-6 text-right pr-1">
                                         <span></span>
@@ -264,7 +276,129 @@
                 </div>
             </div>
 
-            <!-- TAB 2: Recent Additions -->
+            <!-- TAB 2: Domain Breakdown -->
+            <div x-show="activeTab === 'domains'" class="space-y-6">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-slate-900/90 border border-slate-800 p-4 rounded-xl flex items-center justify-between">
+                        <div>
+                            <p class="text-xs text-slate-400 uppercase font-bold">Unique ROM Host Domains</p>
+                            <p class="text-2xl font-black text-indigo-400 mt-0.5" x-text="Object.keys(romDomainStats).length"></p>
+                        </div>
+                        <div class="text-3xl">💾</div>
+                    </div>
+                    <div class="bg-slate-900/90 border border-slate-800 p-4 rounded-xl flex items-center justify-between">
+                        <div>
+                            <p class="text-xs text-slate-400 uppercase font-bold">Unique Media Host Domains</p>
+                            <p class="text-2xl font-black text-emerald-400 mt-0.5" x-text="Object.keys(mediaDomainStats).length"></p>
+                        </div>
+                        <div class="text-3xl">🖼️</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- ROM & Archive File Storage Domains Doughnut -->
+                    <div class="bg-slate-900/90 border border-slate-800 p-5 rounded-2xl flex flex-col shadow-sm">
+                        <div class="mb-4">
+                            <h3 class="text-base font-semibold text-slate-200 flex items-center gap-2">
+                                <span>📦</span> ROM & Archive File Storage Domains
+                            </h3>
+                            <p class="text-xs text-slate-400 mt-1">Includes rom, archive, disks, and multi-file ROM payloads</p>
+                        </div>
+                        <div class="relative flex-1 min-h-[300px] flex items-center justify-center">
+                            <canvas id="romDomainChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Thumbnails & Screenshots Media Domains Doughnut -->
+                    <div class="bg-slate-900/90 border border-slate-800 p-5 rounded-2xl flex flex-col shadow-sm">
+                        <div class="mb-4">
+                            <h3 class="text-base font-semibold text-slate-200 flex items-center gap-2">
+                                <span>🎨</span> Media Asset Hosting Domains
+                            </h3>
+                            <p class="text-xs text-slate-400 mt-1">Hosting providers for thumbnails and background cover art</p>
+                        </div>
+                        <div class="relative flex-1 min-h-[300px] flex items-center justify-center">
+                            <canvas id="mediaDomainChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- TAB 3: Metadata Audit -->
+            <div x-show="activeTab === 'audit'" class="space-y-6">
+                
+                <!-- Metadata Audit Header & Controls -->
+                <div class="bg-slate-900/90 border border-slate-800 p-6 rounded-2xl flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                            <span>🔍</span> Metadata Completeness Audit
+                        </h3>
+                        <p class="text-xs text-slate-400 mt-1">Identifies games missing thumbnails, background artwork, or descriptions.</p>
+                    </div>
+
+                    <!-- Audit Controls & Search -->
+                    <div class="flex flex-wrap items-center gap-3">
+                        <div class="bg-slate-800 p-1 rounded-xl flex gap-1 text-xs font-semibold border border-slate-700/60">
+                            <button @click="auditFilter = 'all'" :class="auditFilter === 'all' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'" class="px-3 py-1.5 rounded-lg transition cursor-pointer">All Issues</button>
+                            <button @click="auditFilter = 'thumbnail'" :class="auditFilter === 'thumbnail' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'" class="px-3 py-1.5 rounded-lg transition cursor-pointer">Missing Thumbnail</button>
+                            <button @click="auditFilter = 'background'" :class="auditFilter === 'background' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'" class="px-3 py-1.5 rounded-lg transition cursor-pointer">Missing Background</button>
+                            <button @click="auditFilter = 'description'" :class="auditFilter === 'description' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'" class="px-3 py-1.5 rounded-lg transition cursor-pointer">Missing Description</button>
+                        </div>
+                        <input type="text" 
+                               x-model="auditSearch" 
+                               placeholder="Filter game titles..." 
+                               class="bg-slate-800 border border-slate-700/80 rounded-xl px-3.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <!-- 100% Complete Celebration Banner (If no missing metadata found) -->
+                <div x-show="missingMetadataGames.length === 0" 
+                     class="bg-gradient-to-r from-emerald-950/60 via-slate-900 to-teal-950/60 border border-emerald-500/40 p-10 rounded-3xl text-center space-y-4 shadow-xl">
+                    <div class="text-6xl animate-bounce">🏆</div>
+                    <div class="space-y-1">
+                        <h4 class="text-2xl font-black text-emerald-300">100% Metadata Complete!</h4>
+                        <p class="text-sm text-slate-300 max-w-lg mx-auto">
+                            Every single game in this feed has a thumbnail, background artwork, and description filled out. Perfect feed setup!
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Missing Metadata Game Cards -->
+                <div x-show="missingMetadataGames.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <template x-for="item in filteredMissingGames" :key="item.id || item.title + item.categoryTitle">
+                        <div class="bg-slate-900/90 border border-slate-800 p-4 rounded-xl space-y-3 flex flex-col justify-between hover:border-slate-700 transition-colors">
+                            <div class="space-y-2">
+                                <div class="flex items-start justify-between gap-2">
+                                    <span class="text-[10px] uppercase font-bold bg-slate-800 text-indigo-300 px-2 py-0.5 rounded border border-slate-700 font-mono" x-text="item.type"></span>
+                                    <span class="text-xs text-slate-400 truncate max-w-[150px]" x-text="item.categoryTitle"></span>
+                                </div>
+                                <h4 class="font-bold text-sm text-slate-100 truncate" x-text="item.title"></h4>
+                            </div>
+
+                            <!-- Missing Flags Badges -->
+                            <div class="space-y-2 pt-2 border-t border-slate-800/80">
+                                <p class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Missing Attributes:</p>
+                                <div class="flex flex-wrap gap-1.5">
+                                    <template x-if="item.missing.thumbnail">
+                                        <span class="bg-rose-500/15 text-rose-300 border border-rose-500/30 text-[10px] px-2 py-0.5 rounded-md font-medium">🖼️ Thumbnail</span>
+                                    </template>
+                                    <template x-if="item.missing.background">
+                                        <span class="bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] px-2 py-0.5 rounded-md font-medium">🌄 Background</span>
+                                    </template>
+                                    <template x-if="item.missing.description">
+                                        <span class="bg-purple-500/15 text-purple-300 border border-purple-500/30 text-[10px] px-2 py-0.5 rounded-md font-medium">📝 Description</span>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+            </div>
+
+            <!-- TAB 4: Recent Additions -->
             <div x-show="activeTab === 'recent'" class="space-y-4">
                 <h3 class="text-base font-semibold text-slate-200">Most Recently Added Titles</h3>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -284,7 +418,7 @@
                 </div>
             </div>
 
-            <!-- TAB 3: Systems Breakdown -->
+            <!-- TAB 5: Systems Breakdown -->
             <div x-show="activeTab === 'systems'" class="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse text-sm">
@@ -323,13 +457,20 @@
                 timelineView: 'bar',
                 feedData: {},
                 allItemsList: [],
+                missingMetadataGames: [],
+                auditFilter: 'all',
+                auditSearch: '',
                 randomGame: null,
                 heatmapDays: [],
                 monthHeaders: [],
                 heatmapMaxCount: 0,
+                romDomainStats: {},
+                mediaDomainStats: {},
                 stats: { totalGames: 0, totalCategories: 0, systems: {}, recentItems: [] },
                 pieChartInstance: null,
                 barChartInstance: null,
+                romChartInstance: null,
+                mediaChartInstance: null,
 
                 handleDrop(event) {
                     this.isDragging = false;
@@ -386,12 +527,71 @@
                     }
                 },
 
+                // Helper to extract domain/hostname safely from any URL string or recognize local relative path
+                extractDomain(urlStr) {
+                    if (!urlStr || typeof urlStr !== 'string') return null;
+                    const str = urlStr.trim();
+                    if (!str) return null;
+
+                    if (str.startsWith('http://') || str.startsWith('https://')) {
+                        try {
+                            const parsed = new URL(str);
+                            let host = parsed.hostname.toLowerCase();
+                            // Strip leading 'www.'
+                            if (host.startsWith('www.')) host = host.substring(4);
+                            return host;
+                        } catch (e) {
+                            return 'Invalid URL';
+                        }
+                    } else {
+                        // Handles relative paths, cloud: locators, local filenames, etc.
+                        return 'Local / Relative Path';
+                    }
+                },
+
+                // Extract all potential ROM or Archive URLs from game props
+                extractRomOrArchiveUrls(props) {
+                    if (!props || typeof props !== 'object') return [];
+                    const foundUrls = [];
+
+                    // 1. Direct string properties commonly used in webЯcade
+                    const targetKeys = ['archive', 'rom', 'game', 'file', 'path', 'url'];
+                    for (const key of targetKeys) {
+                        if (props[key] && typeof props[key] === 'string') {
+                            foundUrls.push(props[key]);
+                        }
+                    }
+
+                    // 2. Array/object properties for multi-file/disk games (e.g., props.disks, props.files, props.roms)
+                    const arrayKeys = ['disks', 'files', 'roms', 'discs', 'archives'];
+                    for (const aKey of arrayKeys) {
+                        if (Array.isArray(props[aKey])) {
+                            props[aKey].forEach(item => {
+                                if (typeof item === 'string') foundUrls.push(item);
+                                else if (item && typeof item === 'object') {
+                                    if (item.url) foundUrls.push(item.url);
+                                    if (item.file) foundUrls.push(item.file);
+                                    if (item.path) foundUrls.push(item.path);
+                                    if (item.rom) foundUrls.push(item.rom);
+                                    if (item.archive) foundUrls.push(item.archive);
+                                }
+                            });
+                        }
+                    }
+
+                    return foundUrls;
+                },
+
                 processFeed(data) {
                     this.feedData = data;
                     let totalGames = 0;
                     let systems = {};
                     let allItems = [];
                     let dateCounts = {};
+                    let missingGames = [];
+
+                    let romDomains = {};
+                    let mediaDomains = {};
 
                     if (data.categories) {
                         data.categories.forEach(cat => {
@@ -406,7 +606,48 @@
                                     systems[sys].count++;
                                     systems[sys].categories.add(cat.title);
 
-                                    // Parse 'added' timestamp or default
+                                    // Check Metadata Completeness
+                                    const missingThumb = !item.thumbnail || item.thumbnail.trim() === '';
+                                    const missingBg = !item.background || item.background.trim() === '';
+                                    const missingDesc = !item.description || item.description.trim() === '';
+
+                                    if (missingThumb || missingBg || missingDesc) {
+                                        missingGames.push({
+                                            ...item,
+                                            categoryTitle: cat.title,
+                                            missing: {
+                                                thumbnail: missingThumb,
+                                                background: missingBg,
+                                                description: missingDesc
+                                            }
+                                        });
+                                    }
+
+                                    // Extract ROM & Archive Domains from item.props
+                                    const romUrls = this.extractRomOrArchiveUrls(item.props);
+                                    if (romUrls.length > 0) {
+                                        romUrls.forEach(u => {
+                                            const dom = this.extractDomain(u);
+                                            if (dom) {
+                                                romDomains[dom] = (romDomains[dom] || 0) + 1;
+                                            }
+                                        });
+                                    } else {
+                                        // If no payload property is defined, track as unknown/local
+                                        romDomains['Local / Relative Path'] = (romDomains['Local / Relative Path'] || 0) + 1;
+                                    }
+
+                                    // Extract Media Domains (Thumbnails & Backgrounds)
+                                    if (item.thumbnail) {
+                                        const dom = this.extractDomain(item.thumbnail);
+                                        if (dom) mediaDomains[dom] = (mediaDomains[dom] || 0) + 1;
+                                    }
+                                    if (item.background) {
+                                        const dom = this.extractDomain(item.background);
+                                        if (dom) mediaDomains[dom] = (mediaDomains[dom] || 0) + 1;
+                                    }
+
+                                    // Parse 'added' timestamp
                                     let addedTime = item.added ? new Date(item.added) : null;
                                     let addedDateFormatted = addedTime && !isNaN(addedTime.getTime()) 
                                         ? addedTime.toLocaleDateString() + ' ' + addedTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) 
@@ -437,6 +678,9 @@
 
                     allItems.sort((a, b) => a.addedTime - b.addedTime);
                     this.allItemsList = allItems;
+                    this.missingMetadataGames = missingGames;
+                    this.romDomainStats = romDomains;
+                    this.mediaDomainStats = mediaDomains;
 
                     // Generate Heatmap Grid & Month Headers
                     this.generateHeatmapData(dateCounts);
@@ -501,7 +745,6 @@
                     this.monthHeaders = monthMap;
                 },
 
-                // Dynamic Heatmap intensity calculation relative to peak activity day
                 getHeatmapColorClass(count) {
                     if (count === 0) return 'bg-slate-800/80 border border-slate-700/60';
                     if (this.heatmapMaxCount === 0) return 'bg-emerald-900';
@@ -527,70 +770,183 @@
                     this.randomGame = this.allItemsList[randomIndex];
                 },
 
+                switchTab(tabName) {
+                    this.activeTab = tabName;
+                    this.$nextTick(() => this.renderCharts());
+                },
+
+                get filteredMissingGames() {
+                    return this.missingMetadataGames.filter(game => {
+                        // Filter by attribute type
+                        if (this.auditFilter === 'thumbnail' && !game.missing.thumbnail) return false;
+                        if (this.auditFilter === 'background' && !game.missing.background) return false;
+                        if (this.auditFilter === 'description' && !game.missing.description) return false;
+
+                        // Filter by title search term
+                        if (this.auditSearch.trim() !== '') {
+                            const term = this.auditSearch.toLowerCase();
+                            const titleMatch = game.title && game.title.toLowerCase().includes(term);
+                            const catMatch = game.categoryTitle && game.categoryTitle.toLowerCase().includes(term);
+                            return titleMatch || catMatch;
+                        }
+
+                        return true;
+                    });
+                },
+
+                // Helper to group domains for charts with an 'Other' threshold category
+                groupDomainData(domainCounts, topCount = 5) {
+                    const sorted = Object.entries(domainCounts).sort((a, b) => b[1] - a[1]);
+                    if (sorted.length <= topCount) {
+                        return {
+                            labels: sorted.map(s => s[0]),
+                            data: sorted.map(s => s[1])
+                        };
+                    }
+
+                    const top = sorted.slice(0, topCount);
+                    const remainder = sorted.slice(topCount);
+                    const otherSum = remainder.reduce((acc, curr) => acc + curr[1], 0);
+
+                    return {
+                        labels: [...top.map(s => s[0]), 'Other Host Domains'],
+                        data: [...top.map(s => s[1]), otherSum]
+                    };
+                },
+
                 renderCharts() {
+                    if (!this.isLoaded) return;
+
                     // 1. Systems Doughnut Chart
-                    const ctxPie = document.getElementById('systemPieChart').getContext('2d');
-                    if (this.pieChartInstance) this.pieChartInstance.destroy();
+                    if (this.activeTab === 'overview') {
+                        const elPie = document.getElementById('systemPieChart');
+                        if (elPie) {
+                            const ctxPie = elPie.getContext('2d');
+                            if (this.pieChartInstance) this.pieChartInstance.destroy();
 
-                    const sortedSystems = Object.entries(this.stats.systems).sort((a,b) => b[1].count - a[1].count);
-                    this.pieChartInstance = new Chart(ctxPie, {
-                        type: 'doughnut',
-                        data: {
-                            labels: sortedSystems.slice(0, 8).map(s => s[0].toUpperCase()),
-                            datasets: [{
-                                data: sortedSystems.slice(0, 8).map(s => s[1].count),
-                                backgroundColor: ['#6366f1', '#ec4899', '#8b5cf6', '#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#64748b'],
-                                borderWidth: 2,
-                                borderColor: '#0f172a'
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: { 
-                                legend: { 
-                                    position: 'bottom', 
-                                    labels: { color: '#94a3b8', font: { family: 'sans-serif', size: 12 } } 
-                                } 
-                            }
+                            const sortedSystems = Object.entries(this.stats.systems).sort((a,b) => b[1].count - a[1].count);
+                            this.pieChartInstance = new Chart(ctxPie, {
+                                type: 'doughnut',
+                                data: {
+                                    labels: sortedSystems.slice(0, 8).map(s => s[0].toUpperCase()),
+                                    datasets: [{
+                                        data: sortedSystems.slice(0, 8).map(s => s[1].count),
+                                        backgroundColor: ['#6366f1', '#ec4899', '#8b5cf6', '#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#64748b'],
+                                        borderWidth: 2,
+                                        borderColor: '#0f172a'
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    plugins: { 
+                                        legend: { 
+                                            position: 'bottom', 
+                                            labels: { color: '#94a3b8', font: { family: 'sans-serif', size: 12 } } 
+                                        } 
+                                    }
+                                }
+                            });
                         }
-                    });
 
-                    // 2. Timeline Bar Chart (Monthly aggregations)
-                    const ctxBar = document.getElementById('timelineBarChart').getContext('2d');
-                    if (this.barChartInstance) this.barChartInstance.destroy();
+                        // 2. Timeline Bar Chart (Monthly aggregations)
+                        const elBar = document.getElementById('timelineBarChart');
+                        if (elBar) {
+                            const ctxBar = elBar.getContext('2d');
+                            if (this.barChartInstance) this.barChartInstance.destroy();
 
-                    const timelineCounts = {};
-                    this.allItemsList.forEach(item => {
-                        if (item.addedTime) {
-                            const d = new Date(item.addedTime);
-                            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                            timelineCounts[key] = (timelineCounts[key] || 0) + 1;
+                            const timelineCounts = {};
+                            this.allItemsList.forEach(item => {
+                                if (item.addedTime) {
+                                    const d = new Date(item.addedTime);
+                                    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                                    timelineCounts[key] = (timelineCounts[key] || 0) + 1;
+                                }
+                            });
+
+                            const sortedDates = Object.keys(timelineCounts).sort();
+                            this.barChartInstance = new Chart(ctxBar, {
+                                type: 'bar',
+                                data: {
+                                    labels: sortedDates.length ? sortedDates : ['No Timestamp Data'],
+                                    datasets: [{
+                                        label: 'Games Added',
+                                        data: sortedDates.length ? sortedDates.map(d => timelineCounts[d]) : [this.stats.totalGames],
+                                        backgroundColor: '#6366f1',
+                                        borderRadius: 6
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    plugins: { legend: { display: false } },
+                                    scales: {
+                                        x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
+                                        y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                                    }
+                                }
+                            });
                         }
-                    });
+                    }
 
-                    const sortedDates = Object.keys(timelineCounts).sort();
-                    this.barChartInstance = new Chart(ctxBar, {
-                        type: 'bar',
-                        data: {
-                            labels: sortedDates.length ? sortedDates : ['No Timestamp Data'],
-                            datasets: [{
-                                label: 'Games Added',
-                                data: sortedDates.length ? sortedDates.map(d => timelineCounts[d]) : [this.stats.totalGames],
-                                backgroundColor: '#6366f1',
-                                borderRadius: 6
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: { legend: { display: false } },
-                            scales: {
-                                x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
-                                y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
-                            }
+                    // 3. Domain Charts Rendering
+                    if (this.activeTab === 'domains') {
+                        // ROM & Archive Domain Chart
+                        const elRom = document.getElementById('romDomainChart');
+                        if (elRom) {
+                            const ctxRom = elRom.getContext('2d');
+                            if (this.romChartInstance) this.romChartInstance.destroy();
+
+                            const romGrouped = this.groupDomainData(this.romDomainStats);
+                            this.romChartInstance = new Chart(ctxRom, {
+                                type: 'doughnut',
+                                data: {
+                                    labels: romGrouped.labels,
+                                    datasets: [{
+                                        data: romGrouped.data,
+                                        backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6', '#94a3b8'],
+                                        borderWidth: 2,
+                                        borderColor: '#0f172a'
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    plugins: {
+                                        legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 12 } } }
+                                    }
+                                }
+                            });
                         }
-                    });
+
+                        // Media Domain Chart
+                        const elMedia = document.getElementById('mediaDomainChart');
+                        if (elMedia) {
+                            const ctxMedia = elMedia.getContext('2d');
+                            if (this.mediaChartInstance) this.mediaChartInstance.destroy();
+
+                            const mediaGrouped = this.groupDomainData(this.mediaDomainStats);
+                            this.mediaChartInstance = new Chart(ctxMedia, {
+                                type: 'doughnut',
+                                data: {
+                                    labels: mediaGrouped.labels,
+                                    datasets: [{
+                                        data: mediaGrouped.data,
+                                        backgroundColor: ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#64748b'],
+                                        borderWidth: 2,
+                                        borderColor: '#0f172a'
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    plugins: {
+                                        legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 12 } } }
+                                    }
+                                }
+                            });
+                        }
+                    }
                 }
             }
         }
